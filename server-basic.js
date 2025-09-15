@@ -12,6 +12,20 @@ const PORT = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || 'changeme';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-change-this';
+
+// Debug environment variables
+console.log('Environment variables check:');
+console.log('PORT:', PORT);
+console.log('OPENAI_API_KEY:', OPENAI_API_KEY ? 'SET' : 'NOT SET');
+console.log('ACCESS_PASSWORD:', ACCESS_PASSWORD !== 'changeme' ? 'SET' : 'NOT SET (using default)');
+console.log('JWT_SECRET:', JWT_SECRET !== 'your-jwt-secret-change-this' ? 'SET' : 'NOT SET (using default)');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'not set');
+console.log('All environment variables:');
+Object.keys(process.env).forEach(key => {
+  if (key.includes('API') || key.includes('PASSWORD') || key.includes('SECRET') || key.includes('NODE_ENV')) {
+    console.log(`${key}: ${process.env[key] ? 'SET' : 'NOT SET'}`);
+  }
+});
 const execAsync = promisify(exec);
 
 // Basic middleware
@@ -88,7 +102,35 @@ function requireSimpleAuth(req, res, next) {
 
 // Health check endpoint (public)
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    env: {
+      port: PORT,
+      hasOpenAI: !!OPENAI_API_KEY,
+      hasPassword: ACCESS_PASSWORD !== 'changeme',
+      hasJWT: JWT_SECRET !== 'your-jwt-secret-change-this',
+      nodeEnv: process.env.NODE_ENV || 'not set'
+    }
+  });
+});
+
+// Debug endpoint to check environment variables (public for now)
+app.get('/debug/env', (req, res) => {
+  const envVars = {};
+  Object.keys(process.env).forEach(key => {
+    // Only show non-sensitive info
+    if (key.includes('PORT') || key.includes('NODE_ENV') || key.includes('RAILWAY')) {
+      envVars[key] = process.env[key];
+    } else if (key.includes('API') || key.includes('PASSWORD') || key.includes('SECRET')) {
+      envVars[key] = process.env[key] ? '***SET***' : 'NOT SET';
+    }
+  });
+  
+  res.json({
+    environment: envVars,
+    processEnvKeys: Object.keys(process.env).length
+  });
 });
 
 // Simple authentication endpoint
