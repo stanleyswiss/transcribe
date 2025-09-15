@@ -9,5 +9,8 @@ RUN npm install --production
 # Copy application
 COPY . .
 
+# Railway will set PORT env var
+EXPOSE 3000
+
 # Start the app
-CMD ["node", "server-stable.js"]
+CMD ["npm", "start"]
