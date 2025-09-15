@@ -8,8 +8,6 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
 const { authenticateSimple, requireSimpleAuth } = require('./middleware/simpleAuth');
 
 const app = express();
@@ -17,47 +15,9 @@ const PORT = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const execAsync = promisify(exec);
 
-// Security middleware
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
-    },
-  },
-}));
-
-// Rate limiting - with Railway proxy support
-const limiter = rateLimit({
-  windowMs: process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000,
-  max: process.env.RATE_LIMIT_MAX_REQUESTS || 100,
-  message: 'Too many requests from this IP, please try again later.',
-  trustProxy: true, // Trust Railway's proxy
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// CORS configuration
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.ALLOWED_ORIGINS?.split(',') || true
-    : true,
-  credentials: true
-};
-
-// Middleware
-app.use(cors(corsOptions));
+// Basic middleware - no rate limiting for now
+app.use(cors());
 app.use(express.json());
-
-// Apply rate limiting only to API routes
-if (process.env.NODE_ENV === 'production') {
-  app.use('/api/', limiter);
-}
-
-// Serve static files
 app.use(express.static('public'));
 
 // Configure multer for file uploads
@@ -159,16 +119,10 @@ async function extractAudio(inputPath, outputPath) {
 // Split audio into chunks if too large
 async function splitAudioIntoChunks(audioPath, outputDir) {
   const stats = fs.statSync(audioPath);
-  const fileSizeMB = Math.round(stats.size / 1024 / 1024);
-  
-  console.log(`Audio file size: ${fileSizeMB}MB`);
   
   if (stats.size < 20 * 1024 * 1024) {
-    console.log('File is small enough, no chunking needed');
     return [audioPath];
   }
-  
-  console.log('File too large, splitting into chunks...');
   
   const chunksDir = path.join(outputDir, 'chunks_' + Date.now());
   if (!fs.existsSync(chunksDir)) {
@@ -180,24 +134,17 @@ async function splitAudioIntoChunks(audioPath, outputDir) {
   
   const splitCommand = `ffmpeg -i "${audioPath}" -f segment -segment_time ${chunkDurationSeconds} -c copy "${outputPattern}"`;
   
-  console.log('Splitting audio with command:', splitCommand);
-  
   try {
-    const { stdout, stderr } = await execAsync(splitCommand);
-    console.log('Audio splitting completed');
-    if (stderr) console.log('Split stderr:', stderr);
+    await execAsync(splitCommand);
     
     const chunkFiles = fs.readdirSync(chunksDir)
       .filter(file => file.startsWith('chunk_') && file.endsWith('.mp3'))
       .sort()
       .map(file => path.join(chunksDir, file));
     
-    console.log(`Created ${chunkFiles.length} chunks:`, chunkFiles.map(f => path.basename(f)));
-    
     return chunkFiles;
     
   } catch (error) {
-    console.error('Audio splitting error:', error);
     throw new Error(`Audio splitting failed: ${error.message}`);
   }
 }
@@ -208,12 +155,9 @@ async function transcribeSingleFile(audioPath, chunkIndex = null) {
   const formData = new FormData();
   
   const stats = fs.statSync(audioPath);
-  const fileSizeMB = Math.round(stats.size / 1024 / 1024);
-  
-  console.log(`Transcribing ${chunkIndex ? `chunk ${chunkIndex}` : 'file'}: ${path.basename(audioPath)} (${fileSizeMB}MB)`);
   
   if (stats.size > 25 * 1024 * 1024) {
-    throw new Error(`File ${path.basename(audioPath)} is ${fileSizeMB}MB, exceeds 25MB Whisper limit`);
+    throw new Error(`File exceeds 25MB Whisper limit`);
   }
   
   formData.append('file', fs.createReadStream(audioPath), {
@@ -223,22 +167,15 @@ async function transcribeSingleFile(audioPath, chunkIndex = null) {
   formData.append('model', 'whisper-1');
   formData.append('response_format', 'json');
   
-  try {
-    const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        ...formData.getHeaders()
-      },
-      timeout: 600000 // 10 minutes timeout
-    });
-    
-    console.log(`Transcription completed for ${chunkIndex ? `chunk ${chunkIndex}` : 'file'}`);
-    return response.data.text;
-    
-  } catch (error) {
-    console.error(`Transcription error for ${path.basename(audioPath)}:`, error.message);
-    throw error;
-  }
+  const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      ...formData.getHeaders()
+    },
+    timeout: 600000
+  });
+  
+  return response.data.text;
 }
 
 // Save transcription to file
@@ -251,7 +188,6 @@ function saveTranscriptionToFile(transcription, originalFilename) {
   const content = `Transcription for: ${originalFilename}\nGenerated: ${new Date().toISOString()}\n\n${transcription}`;
   
   fs.writeFileSync(transcriptionPath, content, 'utf8');
-  console.log(`Transcription saved to: ${transcriptionPath}`);
   
   return transcriptionFilename;
 }
@@ -266,82 +202,11 @@ function cleanupFiles(filesToDelete) {
         } else {
           fs.unlinkSync(filePath);
         }
-        console.log(`Cleaned up: ${filePath}`);
       }
     } catch (error) {
       console.error(`Error cleaning up ${filePath}:`, error.message);
     }
   });
-}
-
-// Check if file is already audio
-function isAudioFile(mimetype) {
-  return mimetype.startsWith('audio/');
-}
-
-// Helper function to process local server files
-async function processServerFileForTranscription(filePath, originalFilename) {
-  let tempAudioPath = null;
-  let chunkFiles = [];
-  let chunksDir = null;
-  
-  try {
-    console.log(`\n=== Processing server file: ${originalFilename} ===`);
-    console.log(`Path: ${filePath}`);
-    
-    const stats = fs.statSync(filePath);
-    console.log(`Size: ${Math.round(stats.size / 1024 / 1024)}MB`);
-    
-    const ext = path.extname(originalFilename).toLowerCase();
-    const isAudio = ['.mp3', '.wav', '.m4a', '.aac'].includes(ext);
-    
-    let audioPath = filePath;
-    
-    if (!isAudio) {
-      console.log('Video file detected, extracting audio...');
-      tempAudioPath = path.join('uploads', `audio_${Date.now()}.mp3`);
-      await extractAudio(filePath, tempAudioPath);
-      audioPath = tempAudioPath;
-      console.log(`Audio extracted to: ${tempAudioPath}`);
-    } else {
-      console.log('Audio file detected, no extraction needed');
-    }
-    
-    chunkFiles = await splitAudioIntoChunks(audioPath, 'uploads');
-    
-    let fullTranscription = '';
-    
-    for (let i = 0; i < chunkFiles.length; i++) {
-      const chunk = chunkFiles[i];
-      const chunkTranscription = await transcribeSingleFile(chunk, i + 1);
-      fullTranscription += (i > 0 ? '\n\n' : '') + chunkTranscription;
-    }
-    
-    const transcriptionFile = saveTranscriptionToFile(fullTranscription, originalFilename);
-    
-    return {
-      success: true,
-      transcriptionFile: transcriptionFile,
-      transcription: fullTranscription
-    };
-    
-  } finally {
-    const filesToClean = [];
-    
-    if (tempAudioPath) filesToClean.push(tempAudioPath);
-    
-    if (chunkFiles.length > 1) {
-      chunksDir = path.dirname(chunkFiles[0]);
-      if (chunksDir.includes('chunks_')) {
-        filesToClean.push(chunksDir);
-      }
-    }
-    
-    if (filesToClean.length > 0) {
-      console.log('Cleaning up temporary files...');
-      cleanupFiles(filesToClean);
-    }
-  }
 }
 
 // Upload and transcribe endpoint (protected)
@@ -352,29 +217,19 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
   
   let audioPath = null;
   let chunkFiles = [];
-  let chunksDir = null;
   
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
     
-    console.log(`\n=== New transcription request ===`);
-    console.log(`Original filename: ${req.file.originalname}`);
-    console.log(`Uploaded filename: ${req.file.filename}`);
-    console.log(`File size: ${Math.round(req.file.size / 1024 / 1024)}MB`);
-    console.log(`Mimetype: ${req.file.mimetype}`);
-    
-    const isAudio = isAudioFile(req.file.mimetype);
+    const isAudio = req.file.mimetype.startsWith('audio/');
     
     if (isAudio) {
-      console.log('Audio file detected, no extraction needed');
       audioPath = req.file.path;
     } else {
-      console.log('Video file detected, extracting audio...');
       audioPath = path.join('uploads', `server_audio_${Date.now()}.mp3`);
       await extractAudio(req.file.path, audioPath);
-      console.log(`Audio extracted to: ${audioPath}`);
     }
     
     chunkFiles = await splitAudioIntoChunks(audioPath, 'uploads');
@@ -388,8 +243,6 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
     }
     
     const transcriptionFile = saveTranscriptionToFile(fullTranscription, req.file.originalname);
-    
-    console.log('=== Transcription completed successfully ===\n');
     
     res.json({
       success: true,
@@ -407,6 +260,7 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
     });
     
   } finally {
+    // Clean up temporary files
     const filesToClean = [];
     
     if (audioPath && audioPath !== req.file?.path) {
@@ -414,14 +268,13 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
     }
     
     if (chunkFiles.length > 1) {
-      chunksDir = path.dirname(chunkFiles[0]);
+      const chunksDir = path.dirname(chunkFiles[0]);
       if (chunksDir.includes('chunks_')) {
         filesToClean.push(chunksDir);
       }
     }
     
     if (filesToClean.length > 0) {
-      console.log('Cleaning up temporary files...');
       cleanupFiles(filesToClean);
     }
   }
@@ -440,9 +293,6 @@ app.post('/api/transcribe-server-file', requireSimpleAuth, async (req, res) => {
       return res.status(400).json({ error: 'No filename provided' });
     }
     
-    console.log(`\n=== Server file transcription request ===`);
-    console.log(`Requested file: ${filename}`);
-    
     const filePath = path.join('uploads', filename);
     
     const resolvedPath = path.resolve(filePath);
@@ -455,15 +305,49 @@ app.post('/api/transcribe-server-file', requireSimpleAuth, async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
     
-    const result = await processServerFileForTranscription(filePath, filename);
+    // Process the file
+    const ext = path.extname(filename).toLowerCase();
+    const isAudio = ['.mp3', '.wav', '.m4a', '.aac'].includes(ext);
     
-    console.log('=== Server file transcription completed successfully ===\n');
+    let audioPath = filePath;
+    let tempAudioPath = null;
+    
+    if (!isAudio) {
+      tempAudioPath = path.join('uploads', `audio_${Date.now()}.mp3`);
+      await extractAudio(filePath, tempAudioPath);
+      audioPath = tempAudioPath;
+    }
+    
+    const chunkFiles = await splitAudioIntoChunks(audioPath, 'uploads');
+    
+    let fullTranscription = '';
+    
+    for (let i = 0; i < chunkFiles.length; i++) {
+      const chunk = chunkFiles[i];
+      const chunkTranscription = await transcribeSingleFile(chunk, i + 1);
+      fullTranscription += (i > 0 ? '\n\n' : '') + chunkTranscription;
+    }
+    
+    const transcriptionFile = saveTranscriptionToFile(fullTranscription, filename);
+    
+    // Cleanup
+    const filesToClean = [];
+    if (tempAudioPath) filesToClean.push(tempAudioPath);
+    if (chunkFiles.length > 1) {
+      const chunksDir = path.dirname(chunkFiles[0]);
+      if (chunksDir.includes('chunks_')) {
+        filesToClean.push(chunksDir);
+      }
+    }
+    if (filesToClean.length > 0) {
+      cleanupFiles(filesToClean);
+    }
     
     res.json({
       success: true,
       message: 'Transcription completed',
-      transcription: result.transcription,
-      transcriptionFile: result.transcriptionFile
+      transcription: fullTranscription,
+      transcriptionFile: transcriptionFile
     });
     
   } catch (error) {
