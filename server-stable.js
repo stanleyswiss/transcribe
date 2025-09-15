@@ -383,14 +383,14 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
           transcriptionFile: transcriptionFilename
         }), 'complete');
         
-        // Close SSE connection
+        // Close SSE connection after sending final result
         setTimeout(() => {
           const client = progressClients.get(progressId);
           if (client) {
             client.end();
             progressClients.delete(progressId);
           }
-        }, 1000);
+        }, 2000); // Longer delay to ensure result is received
 
       } catch (error) {
         console.error('❌ Transcription error:', error);
@@ -403,7 +403,7 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
             client.end();
             progressClients.delete(progressId);
           }
-        }, 1000);
+        }, 2000);
       } finally {
         // Cleanup temporary files
         for (const tempFile of tempFiles) {

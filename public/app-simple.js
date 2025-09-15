@@ -169,9 +169,9 @@ class TranscriptionApp {
         
         const file = this.serverFiles[index];
         
-        // Don't allow selection of transcription files for processing
+        // Handle transcription files differently - offer to view/download them
         if (file.isTranscription) {
-            this.showError('This is a transcription file. Please select a video or audio file to transcribe.');
+            this.viewTranscriptionFile(file);
             return;
         }
         
@@ -706,6 +706,35 @@ class TranscriptionApp {
         this.hideOtherSections();
     }
 
+    async viewTranscriptionFile(file) {
+        try {
+            const response = await fetch(`/api/download/${file.name}`, {
+                headers: {
+                    'Authorization': `Bearer ${this.authToken}`
+                }
+            });
+            
+            if (response.ok) {
+                const text = await response.text();
+                
+                // Show the transcription in the result section
+                this.currentTranscription = {
+                    success: true,
+                    transcription: text,
+                    transcriptionFile: file.name,
+                    originalFile: file.name
+                };
+                
+                this.showResult(this.currentTranscription);
+            } else {
+                this.showError('Failed to load transcription file');
+            }
+        } catch (error) {
+            console.error('Error loading transcription:', error);
+            this.showError('Failed to load transcription file');
+        }
+    }
+
     connectToProgress(progressId, resolve, reject) {
         const eventSource = new EventSource(`/api/progress/${progressId}`);
         let currentProgress = 20; // Start from where upload finished
@@ -753,7 +782,10 @@ class TranscriptionApp {
         eventSource.onerror = (error) => {
             console.error('Progress stream error:', error);
             eventSource.close();
-            reject(new Error('Lost connection to progress stream'));
+            // Don't immediately reject - might be normal closure after completion
+            setTimeout(() => {
+                reject(new Error('Lost connection to progress stream'));
+            }, 1000);
         };
     }
 }
