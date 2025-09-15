@@ -76,17 +76,19 @@ app.use((error, req, res, next) => {
   res.status(500).send('Server error: ' + error.message);
 });
 
-// Start server
-const server = app.listen(PORT, '0.0.0.0', (error) => {
+// Start server - Railway specific binding
+const server = app.listen(PORT, (error) => {
   if (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
   
-  console.log('✅ Server started successfully!');
-  console.log(`🌐 Listening on 0.0.0.0:${PORT}`);
-  console.log(`🏥 Health check: http://localhost:${PORT}/health`);
-  console.log(`🧪 Test endpoint: http://localhost:${PORT}/test`);
+  console.log('✅ MINIMAL TEST SERVER STARTED!');
+  console.log(`🌐 Port: ${PORT}`);  
+  console.log(`🌍 Host: 0.0.0.0 (all interfaces)`);
+  console.log(`🏥 Health: /health`);
+  console.log(`🧪 Test: /test`);
+  console.log('🔥 THIS IS THE MINIMAL TEST VERSION!');
 });
 
 server.on('error', (error) => {
