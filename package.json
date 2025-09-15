@@ -7,19 +7,14 @@
     "express": "^4.18.2",
     "multer": "^1.4.5-lts.1",
     "axios": "^1.6.2",
-    "cors": "^2.8.5",
     "form-data": "^4.0.0",
-    "@clerk/clerk-sdk-node": "^4.13.0",
-    "express-rate-limit": "^7.1.5",
-    "helmet": "^7.1.0",
-    "dotenv": "^16.3.1",
     "jsonwebtoken": "^9.0.2"
   },
   "scripts": {
-    "start": "node server-minimal.js",
+    "start": "node server-basic.js",
     "start:simple": "node server-simple.js",
     "start:clerk": "node server.js",
-    "dev": "node server-minimal.js"
+    "dev": "node server-basic.js"
   },
   "keywords": ["transcription", "whisper", "ffmpeg"],
   "author": "",
