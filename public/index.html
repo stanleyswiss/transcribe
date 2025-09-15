@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teams Meeting Transcription</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.clerk.com/clerk.js" type="text/javascript"></script>
+</head>
+<body>
+    <!-- Authentication Container -->
+    <div id="authContainer" class="auth-container">
+        <div class="auth-box">
+            <h1>🎙️ Teams Meeting Transcription</h1>
+            <p>Please sign in to access the transcription service</p>
+            <div id="clerkSignIn"></div>
+        </div>
+    </div>
+
+    <!-- Main Application (hidden until authenticated) -->
+    <div id="appContainer" class="container" style="display: none;">
+        <header>
+            <h1>🎙️ Teams Meeting Transcription</h1>
+            <p>Upload your Teams recording (any size) and get accurate transcription</p>
+            <small>✨ Large files are automatically chunked for optimal processing</small>
+            <div class="user-info">
+                <span id="userEmail"></span>
+                <button class="btn-secondary btn-small" onclick="signOut()">Sign Out</button>
+            </div>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <!-- Server Files Section -->
+                <div class="server-files-section">
+                    <h3>📂 Select from Server Files</h3>
+                    <div class="server-files-controls">
+                        <button class="btn-secondary" onclick="app.loadServerFiles()" id="loadFilesBtn">
+                            🔄 Load Server Files
+                        </button>
+                        <small>Files already uploaded to the server</small>
+                    </div>
+                    <div class="server-files-list" id="serverFilesList" style="display: none;">
+                        <div class="files-grid" id="filesGrid">
+                            <!-- Server files will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="divider">
+                    <span>OR</span>
+                </div>
+
+                <!-- Upload Section -->
+                <div class="upload-local-section">
+                    <h3>📤 Upload New File</h3>
+                    <div class="drop-zone" id="dropZone">
+                        <div class="drop-content">
+                            <div class="upload-icon">📁</div>
+                            <p>Drop your Teams recording here or click to browse</p>
+                            <small>Supports: MP4, AVI, MOV, MP3, WAV, M4A (up to 1.5GB)</small>
+                            <br><small>📝 Transcriptions are automatically saved to the server</small>
+                            <input type="file" id="fileInput" accept="video/*,audio/*" style="display: none;">
+                        </div>
+                    </div>
+                    <div class="upload-button-container">
+                        <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                            Choose File
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="file-info" id="fileInfo" style="display: none;">
+                <h3>Selected File</h3>
+                <div class="file-details">
+                    <span id="fileName"></span>
+                    <span id="fileSize"></span>
+                </div>
+                <button class="btn-primary" id="processBtn" onclick="processFile()">
+                    🚀 Process & Transcribe
+                </button>
+            </div>
+
+            <div class="progress-section" id="progressSection" style="display: none;">
+                <h3>Processing</h3>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-percentage" id="progressPercentage">0%</div>
+                </div>
+                <div class="progress-text" id="progressText">Initializing...</div>
+                <div class="progress-details" id="progressDetails"></div>
+                <small>⏳ Large files may take several minutes to process and transcribe</small>
+            </div>
+
+            <div class="result-section" id="resultSection" style="display: none;">
+                <h3>Transcription Result</h3>
+                <div class="transcription-box">
+                    <div class="transcription-header">
+                        <span id="transcriptionFile"></span>
+                        <div class="transcription-actions">
+                            <button class="btn-secondary" onclick="copyTranscription()">📋 Copy</button>
+                            <button class="btn-secondary" onclick="downloadTranscription()">💾 Download</button>
+                        </div>
+                    </div>
+                    <div class="transcription-text" id="transcriptionText"></div>
+                </div>
+                <div class="transcription-footer">
+                    <small>💾 This transcription has been saved to the server</small>
+                </div>
+            </div>
+
+            <div class="error-section" id="errorSection" style="display: none;">
+                <h3>❌ Error</h3>
+                <div class="error-message" id="errorMessage"></div>
+                <button class="btn-secondary" onclick="resetApp()">Try Again</button>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by Server-side FFmpeg + OpenAI Whisper with Smart Chunking</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // Initialize Clerk
+        const clerkPublishableKey = '<%= CLERK_PUBLISHABLE_KEY %>';
+        
+        async function initializeAuth() {
+            if (!window.Clerk) {
+                console.error('Clerk not loaded');
+                return;
+            }
+
+            try {
+                await window.Clerk.load();
+                
+                // Check if user is signed in
+                if (window.Clerk.user) {
+                    showApp();
+                } else {
+                    showAuth();
+                }
+
+                // Listen for auth changes
+                window.Clerk.addListener(({ user }) => {
+                    if (user) {
+                        showApp();
+                    } else {
+                        showAuth();
+                    }
+                });
+            } catch (error) {
+                console.error('Auth initialization error:', error);
+                document.getElementById('authContainer').innerHTML = 
+                    '<div class="error-message">Authentication service unavailable. Please check configuration.</div>';
+            }
+        }
+
+        function showAuth() {
+            document.getElementById('authContainer').style.display = 'flex';
+            document.getElementById('appContainer').style.display = 'none';
+            
+            // Mount Clerk sign-in component
+            window.Clerk.mountSignIn(
+                document.getElementById('clerkSignIn'),
+                {
+                    appearance: {
+                        elements: {
+                            rootBox: 'clerk-signin-box',
+                            card: 'clerk-card'
+                        }
+                    }
+                }
+            );
+        }
+
+        function showApp() {
+            document.getElementById('authContainer').style.display = 'none';
+            document.getElementById('appContainer').style.display = 'block';
+            
+            // Display user email
+            const user = window.Clerk.user;
+            if (user && user.primaryEmailAddress) {
+                document.getElementById('userEmail').textContent = user.primaryEmailAddress.emailAddress;
+            }
+        }
+
+        async function signOut() {
+            try {
+                await window.Clerk.signOut();
+            } catch (error) {
+                console.error('Sign out error:', error);
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initializeAuth);
+    </script>
+</body>
+</html>

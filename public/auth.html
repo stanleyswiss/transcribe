@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teams Meeting Transcription - Login</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-box">
+            <h1>🎙️ Teams Meeting Transcription</h1>
+            <p>Please sign in to access the transcription service</p>
+            
+            <!-- Simple password form for initial deployment -->
+            <form id="loginForm" style="margin-top: 30px;">
+                <input type="password" 
+                       id="password" 
+                       placeholder="Enter access password" 
+                       style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 5px;">
+                <button type="submit" class="btn-primary" style="width: 100%;">
+                    Sign In
+                </button>
+            </form>
+            
+            <div id="errorMessage" style="color: #e74c3c; margin-top: 15px; display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('errorMessage');
+            
+            try {
+                const response = await fetch('/api/auth/simple', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Store token and redirect
+                    localStorage.setItem('authToken', data.token);
+                    window.location.href = '/';
+                } else {
+                    errorMsg.textContent = 'Invalid password';
+                    errorMsg.style.display = 'block';
+                }
+            } catch (error) {
+                errorMsg.textContent = 'Authentication error';
+                errorMsg.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

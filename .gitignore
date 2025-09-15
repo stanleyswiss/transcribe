@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Uploads and media files
+uploads/
+*.mp4
+*.mp3
+*.m4a
+*.avi
+*.mov
+*.wav
+*.m4v
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+chunks_*/
+temp/
+
+# Build files
+dist/
+build/

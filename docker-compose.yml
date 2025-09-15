@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  transcription-app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    container_name: transcription-app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Usage:
+# 1. Set environment variable: export OPENAI_API_KEY=your_key_here
+# 2. Run: docker-compose up -d
+# 3. Access: http://localhost:3000

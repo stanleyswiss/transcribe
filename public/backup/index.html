@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teams Meeting Transcription</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎙️ Teams Meeting Transcription</h1>
+            <p>Upload your Teams recording (any size) and get accurate transcription</p>
+            <small>✨ Large files are automatically chunked for optimal processing</small>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-content">
+                        <div class="upload-icon">📁</div>
+                        <p>Drop your Teams recording here or click to browse</p>
+                        <small>Supports: MP4, AVI, MOV, MP3, WAV, M4A (up to 1.5GB)</small>
+                        <br><small>📝 Transcriptions are automatically saved to the uploads folder</small>
+                        <input type="file" id="fileInput" accept="video/*,audio/*" style="display: none;">
+                    </div>
+                </div>
+                <div class="upload-button-container">
+                    <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                        Choose File
+                    </button>
+                </div>
+            </div>
+
+            <div class="file-info" id="fileInfo" style="display: none;">
+                <h3>Selected File</h3>
+                <div class="file-details">
+                    <span id="fileName"></span>
+                    <span id="fileSize"></span>
+                </div>
+                <button class="btn-primary" id="processBtn" onclick="processFile()">
+                    🚀 Process & Transcribe
+                </button>
+            </div>
+
+            <div class="progress-section" id="progressSection" style="display: none;">
+                <h3>Processing</h3>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-percentage" id="progressPercentage">0%</div>
+                </div>
+                <div class="progress-text" id="progressText">Initializing...</div>
+                <div class="progress-details" id="progressDetails"></div>
+                <small>⏳ Large files may take several minutes to process and transcribe</small>
+            </div>
+
+            <div class="result-section" id="resultSection" style="display: none;">
+                <h3>Transcription Result</h3>
+                <div class="transcription-box">
+                    <div class="transcription-header">
+                        <span id="transcriptionFile"></span>
+                        <div class="transcription-actions">
+                            <button class="btn-secondary" onclick="copyTranscription()">📋 Copy</button>
+                            <button class="btn-secondary" onclick="downloadTranscription()">💾 Download</button>
+                        </div>
+                    </div>
+                    <div class="transcription-text" id="transcriptionText"></div>
+                </div>
+                <div class="transcription-footer">
+                    <small>💾 This transcription has been saved to the uploads folder on your server</small>
+                </div>
+            </div>
+
+            <div class="error-section" id="errorSection" style="display: none;">
+                <h3>❌ Error</h3>
+                <div class="error-message" id="errorMessage"></div>
+                <button class="btn-secondary" onclick="resetApp()">Try Again</button>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by Server-side FFmpeg + OpenAI Whisper with Smart Chunking</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
