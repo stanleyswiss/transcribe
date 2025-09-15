@@ -330,96 +330,93 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
     
     // Process async after response
     setTimeout(async () => {
-    
-    let audioPath = req.file.path;
-    let tempFiles = [];
-    
-    try {
-      // Check if it's a video file
-      const isVideo = req.file.mimetype.startsWith('video/');
-      const isAudio = req.file.mimetype.startsWith('audio/');
+      let audioPath = req.file.path;
+      let tempFiles = [];
       
-      if (!isVideo && !isAudio) {
-        sendProgress(progressId, 'Error: Please upload video or audio files only', 'error');
-        return;
-      }
-      
-      // Extract audio from video if needed
-      if (isVideo) {
-        audioPath = path.join('uploads', `audio_${Date.now()}.mp3`);
-        tempFiles.push(audioPath);
-        await extractAudio(req.file.path, audioPath, progressId);
-      }
-      
-      // Split audio into chunks if needed
-      const chunks = await splitAudioIntoChunks(audioPath, progressId);
-      
-      // Add chunk files to temp files for cleanup
-      if (chunks.length > 1) {
-        tempFiles.push(...chunks);
-      }
-      
-      // Transcribe all chunks
-      console.log('🤖 Starting transcription...');
-      sendProgress(progressId, 'Starting transcription...', 'info');
-      const transcription = await transcribeChunks(chunks, progressId);
-    
-    // Save transcription
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const baseName = path.basename(req.file.originalname, path.extname(req.file.originalname));
-    const transcriptionFilename = `${baseName}_transcription_${timestamp}.txt`;
-    const transcriptionPath = path.join('uploads', transcriptionFilename);
-    
-    const content = `Transcription for: ${req.file.originalname}\nGenerated: ${new Date().toISOString()}\n\n${transcription}`;
-    fs.writeFileSync(transcriptionPath, content, 'utf8');
+      try {
+        // Check if it's a video file
+        const isVideo = req.file.mimetype.startsWith('video/');
+        const isAudio = req.file.mimetype.startsWith('audio/');
+        
+        if (!isVideo && !isAudio) {
+          sendProgress(progressId, 'Error: Please upload video or audio files only', 'error');
+          return;
+        }
+        
+        // Extract audio from video if needed
+        if (isVideo) {
+          audioPath = path.join('uploads', `audio_${Date.now()}.mp3`);
+          tempFiles.push(audioPath);
+          await extractAudio(req.file.path, audioPath, progressId);
+        }
+        
+        // Split audio into chunks if needed
+        const chunks = await splitAudioIntoChunks(audioPath, progressId);
+        
+        // Add chunk files to temp files for cleanup
+        if (chunks.length > 1) {
+          tempFiles.push(...chunks);
+        }
+        
+        // Transcribe all chunks
+        console.log('🤖 Starting transcription...');
+        sendProgress(progressId, 'Starting transcription...', 'info');
+        const transcription = await transcribeChunks(chunks, progressId);
+        
+        // Save transcription
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const baseName = path.basename(req.file.originalname, path.extname(req.file.originalname));
+        const transcriptionFilename = `${baseName}_transcription_${timestamp}.txt`;
+        const transcriptionPath = path.join('uploads', transcriptionFilename);
+        
+        const content = `Transcription for: ${req.file.originalname}\nGenerated: ${new Date().toISOString()}\n\n${transcription}`;
+        fs.writeFileSync(transcriptionPath, content, 'utf8');
 
-    console.log('✅ Transcription completed');
-    sendProgress(progressId, 'Transcription completed!', 'success');
-    
-    // Send final result
-    sendProgress(progressId, JSON.stringify({
-      success: true,
-      transcription: transcription,
-      originalFile: req.file.filename,
-      transcriptionFile: transcriptionFilename
-    }), 'complete');
-    
-    // Close SSE connection
-    setTimeout(() => {
-      const client = progressClients.get(progressId);
-      if (client) {
-        client.end();
-        progressClients.delete(progressId);
-      }
-    }, 1000);
-
-    } finally {
-      // Cleanup temporary files
-      for (const tempFile of tempFiles) {
-        try {
-          if (fs.existsSync(tempFile)) {
-            fs.unlinkSync(tempFile);
-            console.log(`🧹 Cleaned up: ${path.basename(tempFile)}`);
+        console.log('✅ Transcription completed');
+        sendProgress(progressId, 'Transcription completed!', 'success');
+        
+        // Send final result
+        sendProgress(progressId, JSON.stringify({
+          success: true,
+          transcription: transcription,
+          originalFile: req.file.filename,
+          transcriptionFile: transcriptionFilename
+        }), 'complete');
+        
+        // Close SSE connection
+        setTimeout(() => {
+          const client = progressClients.get(progressId);
+          if (client) {
+            client.end();
+            progressClients.delete(progressId);
           }
-        } catch (cleanupError) {
-          console.error('Cleanup error:', cleanupError);
+        }, 1000);
+
+      } catch (error) {
+        console.error('❌ Transcription error:', error);
+        sendProgress(progressId, `Transcription failed: ${error.message}`, 'error');
+        
+        // Close SSE connection on error
+        setTimeout(() => {
+          const client = progressClients.get(progressId);
+          if (client) {
+            client.end();
+            progressClients.delete(progressId);
+          }
+        }, 1000);
+      } finally {
+        // Cleanup temporary files
+        for (const tempFile of tempFiles) {
+          try {
+            if (fs.existsSync(tempFile)) {
+              fs.unlinkSync(tempFile);
+              console.log(`🧹 Cleaned up: ${path.basename(tempFile)}`);
+            }
+          } catch (cleanupError) {
+            console.error('Cleanup error:', cleanupError);
+          }
         }
       }
-    }
-
-    } catch (error) {
-      console.error('❌ Transcription error:', error);
-      sendProgress(progressId, `Transcription failed: ${error.message}`, 'error');
-      
-      // Close SSE connection on error
-      setTimeout(() => {
-        const client = progressClients.get(progressId);
-        if (client) {
-          client.end();
-          progressClients.delete(progressId);
-        }
-      }, 1000);
-    }
     }, 100); // Small delay to let client connect to SSE
   } catch (error) {
     console.error('❌ Initial error:', error);
