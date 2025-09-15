@@ -446,7 +446,12 @@ class TranscriptionApp {
                 if (xhr.status === 200) {
                     try {
                         const result = JSON.parse(xhr.responseText);
-                        if (result.success) {
+                        if (result.progressId) {
+                            // New SSE-based progress tracking
+                            this.updateProgress(20, 'Upload complete', 'Connecting to server for processing...');
+                            this.connectToProgress(result.progressId, resolve, reject);
+                        } else if (result.success) {
+                            // Old response format (fallback)
                             resolve(result);
                         } else {
                             reject(new Error(result.error || 'Transcription failed'));
@@ -699,6 +704,57 @@ class TranscriptionApp {
         document.getElementById('fileInput').value = '';
         this.clearServerFileSelection();
         this.hideOtherSections();
+    }
+
+    connectToProgress(progressId, resolve, reject) {
+        const eventSource = new EventSource(`/api/progress/${progressId}`);
+        let currentProgress = 20; // Start from where upload finished
+        
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'complete') {
+                    // Final result received
+                    eventSource.close();
+                    const result = JSON.parse(data.message);
+                    resolve(result);
+                } else if (data.type === 'error') {
+                    eventSource.close();
+                    reject(new Error(data.message));
+                } else {
+                    // Progress update
+                    let progress = currentProgress;
+                    
+                    // Map progress based on message content
+                    if (data.message.includes('Extracting audio')) {
+                        progress = 30;
+                    } else if (data.message.includes('splitting into chunks') || data.message.includes('Creating chunk')) {
+                        progress = 40;
+                    } else if (data.message.includes('Transcribing chunk')) {
+                        const match = data.message.match(/chunk (\d+)\/(\d+)/);
+                        if (match) {
+                            const current = parseInt(match[1]);
+                            const total = parseInt(match[2]);
+                            progress = 50 + Math.round((current / total) * 40); // 50-90%
+                        }
+                    } else if (data.message.includes('completed')) {
+                        progress = 95;
+                    }
+                    
+                    currentProgress = Math.max(currentProgress, progress);
+                    this.updateProgress(currentProgress, data.message, `Server: ${data.message}`);
+                }
+            } catch (e) {
+                console.error('Error parsing progress data:', e);
+            }
+        };
+        
+        eventSource.onerror = (error) => {
+            console.error('Progress stream error:', error);
+            eventSource.close();
+            reject(new Error('Lost connection to progress stream'));
+        };
     }
 }
 

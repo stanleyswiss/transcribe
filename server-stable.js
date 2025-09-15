@@ -182,23 +182,26 @@ app.get('/api/server-files', requireSimpleAuth, (req, res) => {
 });
 
 // Extract audio from video using FFmpeg
-async function extractAudio(inputPath, outputPath) {
+async function extractAudio(inputPath, outputPath, progressId) {
   const command = `ffmpeg -i "${inputPath}" -vn -acodec mp3 -ab 64k -ac 1 -ar 22050 -y "${outputPath}"`;
   
   console.log('🎬 Extracting audio with FFmpeg...');
+  sendProgress(progressId, 'Extracting audio from video...', 'info');
   
   try {
     const { stdout, stderr } = await execAsync(command);
     console.log('✅ Audio extraction completed');
+    sendProgress(progressId, 'Audio extraction completed', 'success');
     return true;
   } catch (error) {
     console.error('❌ FFmpeg error:', error);
+    sendProgress(progressId, `Audio extraction failed: ${error.message}`, 'error');
     throw new Error(`Audio extraction failed: ${error.message}`);
   }
 }
 
 // Split audio into chunks
-async function splitAudioIntoChunks(audioPath, maxSizeMB = 24) {
+async function splitAudioIntoChunks(audioPath, progressId, maxSizeMB = 24) {
   const stats = fs.statSync(audioPath);
   const fileSizeMB = stats.size / (1024 * 1024);
   
@@ -207,6 +210,7 @@ async function splitAudioIntoChunks(audioPath, maxSizeMB = 24) {
   }
   
   console.log(`📊 File size: ${fileSizeMB.toFixed(2)}MB, splitting into chunks...`);
+  sendProgress(progressId, `File size: ${fileSizeMB.toFixed(2)}MB, splitting into chunks...`, 'info');
   
   // Get audio duration
   const durationCommand = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`;
@@ -228,22 +232,25 @@ async function splitAudioIntoChunks(audioPath, maxSizeMB = 24) {
     const splitCommand = `ffmpeg -i "${audioPath}" -ss ${startTime} -t ${chunkDuration} -acodec copy -y "${chunkPath}"`;
     
     console.log(`🔪 Creating chunk ${i + 1}/${numChunks}...`);
+    sendProgress(progressId, `Creating chunk ${i + 1}/${numChunks}...`, 'info');
     await execAsync(splitCommand);
     
     chunks.push(chunkPath);
   }
   
   console.log(`✅ Split into ${chunks.length} chunks`);
+  sendProgress(progressId, `Split into ${chunks.length} chunks`, 'success');
   return chunks;
 }
 
 // Transcribe multiple audio chunks
-async function transcribeChunks(chunks) {
+async function transcribeChunks(chunks, progressId) {
   const FormData = require('form-data');
   const transcriptions = [];
   
   for (let i = 0; i < chunks.length; i++) {
     console.log(`🎙️ Transcribing chunk ${i + 1}/${chunks.length}...`);
+    sendProgress(progressId, `Transcribing chunk ${i + 1}/${chunks.length}...`, 'info');
     
     const formData = new FormData();
     formData.append('file', fs.createReadStream(chunks[i]), {
@@ -272,6 +279,35 @@ async function transcribeChunks(chunks) {
   return transcriptions.join(' ');
 }
 
+// Progress tracking for SSE
+const progressClients = new Map();
+
+// SSE endpoint for progress updates
+app.get('/api/progress/:id', requireSimpleAuth, (req, res) => {
+  const { id } = req.params;
+  
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*'
+  });
+  
+  progressClients.set(id, res);
+  
+  req.on('close', () => {
+    progressClients.delete(id);
+  });
+});
+
+// Helper to send progress updates
+function sendProgress(id, message, type = 'info') {
+  const client = progressClients.get(id);
+  if (client) {
+    client.write(`data: ${JSON.stringify({ message, type, timestamp: new Date().toISOString() })}\n\n`);
+  }
+}
+
 // Enhanced transcription endpoint with video support and chunking
 app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req, res) => {
   try {
@@ -283,7 +319,17 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    // Generate unique ID for this transcription
+    const progressId = `transcribe_${Date.now()}`;
+    
     console.log(`📄 Processing file: ${req.file.originalname}`);
+    sendProgress(progressId, `Processing file: ${req.file.originalname}`, 'info');
+    
+    // Send progress ID immediately and let client connect to SSE
+    res.json({ progressId, message: 'Processing started' });
+    
+    // Process async after response
+    setTimeout(async () => {
     
     let audioPath = req.file.path;
     let tempFiles = [];
@@ -301,11 +347,11 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
       if (isVideo) {
         audioPath = path.join('uploads', `audio_${Date.now()}.mp3`);
         tempFiles.push(audioPath);
-        await extractAudio(req.file.path, audioPath);
+        await extractAudio(req.file.path, audioPath, progressId);
       }
       
       // Split audio into chunks if needed
-      const chunks = await splitAudioIntoChunks(audioPath);
+      const chunks = await splitAudioIntoChunks(audioPath, progressId);
       
       // Add chunk files to temp files for cleanup
       if (chunks.length > 1) {
@@ -314,7 +360,8 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
       
       // Transcribe all chunks
       console.log('🤖 Starting transcription...');
-      const transcription = await transcribeChunks(chunks);
+      sendProgress(progressId, 'Starting transcription...', 'info');
+      const transcription = await transcribeChunks(chunks, progressId);
     
     // Save transcription
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -326,8 +373,24 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
     fs.writeFileSync(transcriptionPath, content, 'utf8');
 
     console.log('✅ Transcription completed');
-
-      res.json({
+    sendProgress(progressId, 'Transcription completed!', 'success');
+    
+    // Send final result
+    sendProgress(progressId, JSON.stringify({
+      success: true,
+      transcription: transcription,
+      originalFile: req.file.filename,
+      transcriptionFile: transcriptionFilename
+    }), 'complete');
+    
+    // Close SSE connection
+    setTimeout(() => {
+      const client = progressClients.get(progressId);
+      if (client) {
+        client.end();
+        progressClients.delete(progressId);
+      }
+    }, 1000);
         success: true,
         message: 'Transcription completed',
         transcription: transcription,
@@ -351,8 +414,22 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
 
   } catch (error) {
     console.error('❌ Transcription error:', error);
+    sendProgress(progressId, `Transcription failed: ${error.message}`, 'error');
+    
+    // Close SSE connection on error
+    setTimeout(() => {
+      const client = progressClients.get(progressId);
+      if (client) {
+        client.end();
+        progressClients.delete(progressId);
+      }
+    }, 1000);
+  }
+    }, 100); // Small delay to let client connect to SSE
+  } catch (error) {
+    console.error('❌ Initial error:', error);
     res.status(500).json({
-      error: 'Transcription failed',
+      error: 'Failed to start processing',
       details: error.message
     });
   }
