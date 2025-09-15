@@ -5,26 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teams Meeting Transcription</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.clerk.com/clerk.js" type="text/javascript"></script>
 </head>
 <body>
-    <!-- Authentication Container -->
-    <div id="authContainer" class="auth-container">
-        <div class="auth-box">
-            <h1>🎙️ Teams Meeting Transcription</h1>
-            <p>Please sign in to access the transcription service</p>
-            <div id="clerkSignIn"></div>
-        </div>
-    </div>
-
-    <!-- Main Application (hidden until authenticated) -->
-    <div id="appContainer" class="container" style="display: none;">
+    <div class="container">
         <header>
             <h1>🎙️ Teams Meeting Transcription</h1>
             <p>Upload your Teams recording (any size) and get accurate transcription</p>
             <small>✨ Large files are automatically chunked for optimal processing</small>
-            <div class="user-info">
-                <span id="userEmail"></span>
+            <div class="user-info" id="userInfo" style="display: none;">
+                <span id="userEmail">Authenticated</span>
                 <button class="btn-secondary btn-small" onclick="signOut()">Sign Out</button>
             </div>
         </header>
@@ -124,81 +113,6 @@
         </footer>
     </div>
 
-    <script src="app.js"></script>
-    <script>
-        // Initialize Clerk
-        const clerkPublishableKey = '<%= CLERK_PUBLISHABLE_KEY %>';
-        
-        async function initializeAuth() {
-            if (!window.Clerk) {
-                console.error('Clerk not loaded');
-                return;
-            }
-
-            try {
-                await window.Clerk.load();
-                
-                // Check if user is signed in
-                if (window.Clerk.user) {
-                    showApp();
-                } else {
-                    showAuth();
-                }
-
-                // Listen for auth changes
-                window.Clerk.addListener(({ user }) => {
-                    if (user) {
-                        showApp();
-                    } else {
-                        showAuth();
-                    }
-                });
-            } catch (error) {
-                console.error('Auth initialization error:', error);
-                document.getElementById('authContainer').innerHTML = 
-                    '<div class="error-message">Authentication service unavailable. Please check configuration.</div>';
-            }
-        }
-
-        function showAuth() {
-            document.getElementById('authContainer').style.display = 'flex';
-            document.getElementById('appContainer').style.display = 'none';
-            
-            // Mount Clerk sign-in component
-            window.Clerk.mountSignIn(
-                document.getElementById('clerkSignIn'),
-                {
-                    appearance: {
-                        elements: {
-                            rootBox: 'clerk-signin-box',
-                            card: 'clerk-card'
-                        }
-                    }
-                }
-            );
-        }
-
-        function showApp() {
-            document.getElementById('authContainer').style.display = 'none';
-            document.getElementById('appContainer').style.display = 'block';
-            
-            // Display user email
-            const user = window.Clerk.user;
-            if (user && user.primaryEmailAddress) {
-                document.getElementById('userEmail').textContent = user.primaryEmailAddress.emailAddress;
-            }
-        }
-
-        async function signOut() {
-            try {
-                await window.Clerk.signOut();
-            } catch (error) {
-                console.error('Sign out error:', error);
-            }
-        }
-
-        // Initialize when page loads
-        document.addEventListener('DOMContentLoaded', initializeAuth);
-    </script>
+    <script src="app-simple.js"></script>
 </body>
 </html>
