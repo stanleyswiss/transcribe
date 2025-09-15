@@ -249,6 +249,12 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
   }
 });
 
+// Catch-all route for debugging
+app.get('*', (req, res) => {
+  console.log(`Unhandled route: ${req.method} ${req.path}`);
+  res.status(404).json({ error: 'Not found', path: req.path });
+});
+
 // Error handling
 app.use((error, req, res, next) => {
   console.error('Server error:', error);
@@ -277,4 +283,14 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 
 server.on('error', (error) => {
   console.error('❌ Server error:', error);
+});
+
+// Log unhandled rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(1);
 });
