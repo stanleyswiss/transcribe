@@ -18,12 +18,12 @@ COPY . .
 # Create uploads directory
 RUN mkdir -p uploads
 
-# Expose port
-EXPOSE 3000
+# Expose port - Railway will set PORT env var
+EXPOSE $PORT
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
+# Health check - disable for Railway
+# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+#   CMD wget --quiet --tries=1 --spider http://localhost:$PORT/health || exit 1
 
 # Start application
 CMD ["npm", "start"]
