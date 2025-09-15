@@ -37,7 +37,7 @@ app.use((req, res, next) => {
 });
 
 // Serve static files
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Create uploads directory if it doesn't exist
 if (!fs.existsSync('uploads')) {
@@ -109,9 +109,7 @@ function requireSimpleAuth(req, res, next) {
 }
 
 // Basic routes
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// Root route handled by express.static
 
 app.get('/health', (req, res) => {
   res.status(200).json({ 
