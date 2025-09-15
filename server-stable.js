@@ -406,19 +406,19 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
       }
     }
 
-  } catch (error) {
-    console.error('❌ Transcription error:', error);
-    sendProgress(progressId, `Transcription failed: ${error.message}`, 'error');
-    
-    // Close SSE connection on error
-    setTimeout(() => {
-      const client = progressClients.get(progressId);
-      if (client) {
-        client.end();
-        progressClients.delete(progressId);
-      }
-    }, 1000);
-  }
+    } catch (error) {
+      console.error('❌ Transcription error:', error);
+      sendProgress(progressId, `Transcription failed: ${error.message}`, 'error');
+      
+      // Close SSE connection on error
+      setTimeout(() => {
+        const client = progressClients.get(progressId);
+        if (client) {
+          client.end();
+          progressClients.delete(progressId);
+        }
+      }, 1000);
+    }
     }, 100); // Small delay to let client connect to SSE
   } catch (error) {
     console.error('❌ Initial error:', error);
