@@ -18,8 +18,7 @@ COPY . .
 # Create uploads directory
 RUN mkdir -p uploads
 
-# Expose port - Railway will set PORT env var
-EXPOSE $PORT
+# Note: Railway handles port mapping automatically, no EXPOSE needed
 
 # Health check - disable for Railway
 # HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
