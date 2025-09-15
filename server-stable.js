@@ -4,6 +4,10 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+
+const execAsync = promisify(exec);
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -177,7 +181,98 @@ app.get('/api/server-files', requireSimpleAuth, (req, res) => {
   }
 });
 
-// Simple transcription endpoint
+// Extract audio from video using FFmpeg
+async function extractAudio(inputPath, outputPath) {
+  const command = `ffmpeg -i "${inputPath}" -vn -acodec mp3 -ab 64k -ac 1 -ar 22050 -y "${outputPath}"`;
+  
+  console.log('🎬 Extracting audio with FFmpeg...');
+  
+  try {
+    const { stdout, stderr } = await execAsync(command);
+    console.log('✅ Audio extraction completed');
+    return true;
+  } catch (error) {
+    console.error('❌ FFmpeg error:', error);
+    throw new Error(`Audio extraction failed: ${error.message}`);
+  }
+}
+
+// Split audio into chunks
+async function splitAudioIntoChunks(audioPath, maxSizeMB = 24) {
+  const stats = fs.statSync(audioPath);
+  const fileSizeMB = stats.size / (1024 * 1024);
+  
+  if (fileSizeMB <= maxSizeMB) {
+    return [audioPath];
+  }
+  
+  console.log(`📊 File size: ${fileSizeMB.toFixed(2)}MB, splitting into chunks...`);
+  
+  // Get audio duration
+  const durationCommand = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`;
+  const { stdout: duration } = await execAsync(durationCommand);
+  const totalDuration = parseFloat(duration);
+  
+  // Calculate chunk duration to get files under maxSizeMB
+  const numChunks = Math.ceil(fileSizeMB / maxSizeMB);
+  const chunkDuration = Math.floor(totalDuration / numChunks);
+  
+  const chunks = [];
+  const baseDir = path.dirname(audioPath);
+  const baseName = path.basename(audioPath, path.extname(audioPath));
+  
+  for (let i = 0; i < numChunks; i++) {
+    const startTime = i * chunkDuration;
+    const chunkPath = path.join(baseDir, `${baseName}_chunk_${i + 1}.mp3`);
+    
+    const splitCommand = `ffmpeg -i "${audioPath}" -ss ${startTime} -t ${chunkDuration} -acodec copy -y "${chunkPath}"`;
+    
+    console.log(`🔪 Creating chunk ${i + 1}/${numChunks}...`);
+    await execAsync(splitCommand);
+    
+    chunks.push(chunkPath);
+  }
+  
+  console.log(`✅ Split into ${chunks.length} chunks`);
+  return chunks;
+}
+
+// Transcribe multiple audio chunks
+async function transcribeChunks(chunks) {
+  const FormData = require('form-data');
+  const transcriptions = [];
+  
+  for (let i = 0; i < chunks.length; i++) {
+    console.log(`🎙️ Transcribing chunk ${i + 1}/${chunks.length}...`);
+    
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(chunks[i]), {
+      filename: path.basename(chunks[i]),
+      contentType: 'audio/mp3'
+    });
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'json');
+    
+    try {
+      const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          ...formData.getHeaders()
+        },
+        timeout: 600000
+      });
+      
+      transcriptions.push(response.data.text);
+    } catch (error) {
+      console.error(`❌ Error transcribing chunk ${i + 1}:`, error);
+      throw error;
+    }
+  }
+  
+  return transcriptions.join(' ');
+}
+
+// Enhanced transcription endpoint with video support and chunking
 app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req, res) => {
   try {
     if (!OPENAI_API_KEY) {
@@ -190,38 +285,36 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
 
     console.log(`📄 Processing file: ${req.file.originalname}`);
     
-    // For now, just handle audio files directly (no video conversion)
-    if (!req.file.mimetype.startsWith('audio/')) {
-      return res.status(400).json({ error: 'Please upload audio files only for now (MP3, WAV, M4A)' });
-    }
-
-    // Check file size
-    if (req.file.size > 25 * 1024 * 1024) {
-      return res.status(400).json({ error: 'Audio file too large. Please keep under 25MB.' });
-    }
-
-    // Transcribe with OpenAI
-    const FormData = require('form-data');
-    const formData = new FormData();
+    let audioPath = req.file.path;
+    let tempFiles = [];
     
-    formData.append('file', fs.createReadStream(req.file.path), {
-      filename: req.file.originalname,
-      contentType: req.file.mimetype
-    });
-    formData.append('model', 'whisper-1');
-    formData.append('response_format', 'json');
-
-    console.log('🤖 Sending to OpenAI...');
-    
-    const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        ...formData.getHeaders()
-      },
-      timeout: 300000 // 5 minutes
-    });
-
-    const transcription = response.data.text;
+    try {
+      // Check if it's a video file
+      const isVideo = req.file.mimetype.startsWith('video/');
+      const isAudio = req.file.mimetype.startsWith('audio/');
+      
+      if (!isVideo && !isAudio) {
+        return res.status(400).json({ error: 'Please upload video or audio files only' });
+      }
+      
+      // Extract audio from video if needed
+      if (isVideo) {
+        audioPath = path.join('uploads', `audio_${Date.now()}.mp3`);
+        tempFiles.push(audioPath);
+        await extractAudio(req.file.path, audioPath);
+      }
+      
+      // Split audio into chunks if needed
+      const chunks = await splitAudioIntoChunks(audioPath);
+      
+      // Add chunk files to temp files for cleanup
+      if (chunks.length > 1) {
+        tempFiles.push(...chunks);
+      }
+      
+      // Transcribe all chunks
+      console.log('🤖 Starting transcription...');
+      const transcription = await transcribeChunks(chunks);
     
     // Save transcription
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -234,13 +327,27 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
 
     console.log('✅ Transcription completed');
 
-    res.json({
-      success: true,
-      message: 'Transcription completed',
-      transcription: transcription,
-      originalFile: req.file.filename,
-      transcriptionFile: transcriptionFilename
-    });
+      res.json({
+        success: true,
+        message: 'Transcription completed',
+        transcription: transcription,
+        originalFile: req.file.filename,
+        transcriptionFile: transcriptionFilename
+      });
+
+    } finally {
+      // Cleanup temporary files
+      for (const tempFile of tempFiles) {
+        try {
+          if (fs.existsSync(tempFile)) {
+            fs.unlinkSync(tempFile);
+            console.log(`🧹 Cleaned up: ${path.basename(tempFile)}`);
+          }
+        } catch (cleanupError) {
+          console.error('Cleanup error:', cleanupError);
+        }
+      }
+    }
 
   } catch (error) {
     console.error('❌ Transcription error:', error);

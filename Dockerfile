@@ -1,5 +1,8 @@
 FROM node:18-alpine
 
+# Install FFmpeg for video processing
+RUN apk add --no-cache ffmpeg
+
 WORKDIR /app
 
 # Copy and install dependencies first
