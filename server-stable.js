@@ -262,10 +262,11 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Start server
-const server = app.listen(PORT, '0.0.0.0', () => {
+// Start server - Railway needs this specific binding
+const server = app.listen(PORT, () => {
   console.log('🎉 Server started successfully!');
   console.log(`🌐 Running on port ${PORT}`);
+  console.log(`🌍 Binding: 0.0.0.0:${PORT}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
   console.log('🎵 Ready for transcriptions!');
 });
