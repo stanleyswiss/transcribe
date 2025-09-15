@@ -11,10 +11,10 @@
     "jsonwebtoken": "^9.0.2"
   },
   "scripts": {
-    "start": "node server-minimal-test.js",
+    "start": "node server-stable.js",
     "start:simple": "node server-simple.js",
     "start:clerk": "node server.js",
-    "dev": "node server-minimal-test.js"
+    "dev": "node server-stable.js"
   },
   "keywords": ["transcription", "whisper", "ffmpeg"],
   "author": "",

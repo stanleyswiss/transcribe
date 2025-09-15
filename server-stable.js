@@ -6,7 +6,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || 'changeme';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-change-this';
