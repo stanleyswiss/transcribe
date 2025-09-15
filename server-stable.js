@@ -391,12 +391,6 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
         progressClients.delete(progressId);
       }
     }, 1000);
-        success: true,
-        message: 'Transcription completed',
-        transcription: transcription,
-        originalFile: req.file.filename,
-        transcriptionFile: transcriptionFilename
-      });
 
     } finally {
       // Cleanup temporary files
