@@ -14,6 +14,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-change-this';
 console.log('🚀 Starting Transcription Server...');
 console.log('📊 Environment Check:');
 console.log(`   PORT: ${PORT}`);
+console.log(`   process.env.PORT: ${process.env.PORT}`);
+console.log(`   Railway PORT env: ${process.env.PORT || 'NOT SET'}`);
 console.log(`   OPENAI_API_KEY: ${OPENAI_API_KEY ? '✅ SET' : '❌ NOT SET'}`);
 console.log(`   ACCESS_PASSWORD: ${ACCESS_PASSWORD !== 'changeme' ? '✅ SET' : '❌ NOT SET'}`);
 console.log(`   JWT_SECRET: ${JWT_SECRET !== 'your-jwt-secret-change-this' ? '✅ SET' : '❌ NOT SET'}`);
