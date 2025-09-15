@@ -111,6 +111,10 @@ function requireSimpleAuth(req, res, next) {
 // Basic routes
 // Root route handled by express.static
 
+app.get('/test', (req, res) => {
+  res.send('OK');
+});
+
 app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'healthy', 
