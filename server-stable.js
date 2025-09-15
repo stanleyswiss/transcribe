@@ -109,7 +109,9 @@ function requireSimpleAuth(req, res, next) {
 }
 
 // Basic routes
-// Root route handled by express.static
+app.get('/', (req, res) => {
+  res.send('Transcription App is Running!');
+});
 
 app.get('/test', (req, res) => {
   res.send('OK');
@@ -279,6 +281,10 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌍 Binding: 0.0.0.0:${PORT}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
   console.log('🎵 Ready for transcriptions!');
+  
+  // Test if server is really listening
+  const address = server.address();
+  console.log(`📡 Server actually listening on: ${address.address}:${address.port}`);
 });
 
 server.on('error', (error) => {
