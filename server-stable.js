@@ -340,7 +340,8 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
       const isAudio = req.file.mimetype.startsWith('audio/');
       
       if (!isVideo && !isAudio) {
-        return res.status(400).json({ error: 'Please upload video or audio files only' });
+        sendProgress(progressId, 'Error: Please upload video or audio files only', 'error');
+        return;
       }
       
       // Extract audio from video if needed
