@@ -12,8 +12,7 @@ const execAsync = promisify(exec);
 const app = express();
 const PORT = process.env.PORT || 8080;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || 'changeme';
-const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-change-this';
+const { authenticateSimple, requireSimpleAuth } = require('./middleware/simpleAuth');
 
 console.log('🚀 Starting Transcription Server...');
 console.log('📊 Environment Check:');
@@ -21,18 +20,23 @@ console.log(`   PORT: ${PORT}`);
 console.log(`   process.env.PORT: ${process.env.PORT}`);
 console.log(`   Railway PORT env: ${process.env.PORT || 'NOT SET'}`);
 console.log(`   OPENAI_API_KEY: ${OPENAI_API_KEY ? '✅ SET' : '❌ NOT SET'}`);
-console.log(`   ACCESS_PASSWORD: ${ACCESS_PASSWORD !== 'changeme' ? '✅ SET' : '❌ NOT SET'}`);
-console.log(`   JWT_SECRET: ${JWT_SECRET !== 'your-jwt-secret-change-this' ? '✅ SET' : '❌ NOT SET'}`);
+console.log(`   ACCESS_PASSWORD: ${process.env.ACCESS_PASSWORD ? '✅ SET' : '❌ NOT SET'}`);
+console.log(`   JWT_SECRET: ${process.env.JWT_SECRET ? '✅ SET' : '❌ NOT SET'}`);
 
 // Basic middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // CORS middleware
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'http://localhost:8080'];
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
   } else {
@@ -56,7 +60,8 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const timestamp = Date.now();
-    cb(null, `upload_${timestamp}_${file.originalname}`);
+    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, `upload_${timestamp}_${sanitizedName}`);
   }
 });
 
@@ -64,53 +69,36 @@ const upload = multer({
   storage: storage,
   limits: {
     fileSize: 1500 * 1024 * 1024 // 1.5GB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = [
+      'audio/mpeg',
+      'audio/mp3',
+      'audio/wav',
+      'audio/wave',
+      'audio/x-wav',
+      'audio/mp4',
+      'audio/m4a',
+      'audio/x-m4a',
+      'audio/ogg',
+      'audio/webm',
+      'video/mp4',
+      'video/mpeg',
+      'video/quicktime',
+      'video/webm'
+    ];
+    
+    const allowedExtensions = ['.mp3', '.wav', '.m4a', '.mp4', '.mpeg', '.mpg', '.mov', '.ogg', '.webm'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    
+    if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only audio and video files are allowed.'));
+    }
   }
 });
 
-// Simple auth functions
-function authenticateSimple(req, res) {
-  try {
-    const { password } = req.body;
-    
-    if (password === ACCESS_PASSWORD) {
-      const token = jwt.sign(
-        { authenticated: true, timestamp: Date.now() },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-      
-      res.json({ success: true, token });
-    } else {
-      res.status(401).json({ success: false, error: 'Invalid password' });
-    }
-  } catch (error) {
-    console.error('Auth error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
-  }
-}
-
-function requireSimpleAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-    
-    jwt.verify(token, JWT_SECRET, (err, decoded) => {
-      if (err) {
-        return res.status(403).json({ error: 'Invalid token' });
-      }
-      
-      req.auth = decoded;
-      next();
-    });
-  } catch (error) {
-    console.error('Auth middleware error:', error);
-    res.status(500).json({ error: 'Authentication error' });
-  }
-}
 
 // Basic routes
 app.get('/', (req, res) => {

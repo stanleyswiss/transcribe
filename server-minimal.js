@@ -27,7 +27,8 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const timestamp = Date.now();
-    cb(null, `video_${timestamp}_${file.originalname}`);
+    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, `video_${timestamp}_${sanitizedName}`);
   }
 });
 

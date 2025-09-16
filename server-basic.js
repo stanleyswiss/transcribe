@@ -10,15 +10,14 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || 'changeme';
-const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-change-this';
+const { authenticateSimple, requireSimpleAuth } = require('./middleware/simpleAuth');
 
 // Debug environment variables
 console.log('Environment variables check:');
 console.log('PORT:', PORT);
 console.log('OPENAI_API_KEY:', OPENAI_API_KEY ? 'SET' : 'NOT SET');
-console.log('ACCESS_PASSWORD:', ACCESS_PASSWORD !== 'changeme' ? 'SET' : 'NOT SET (using default)');
-console.log('JWT_SECRET:', JWT_SECRET !== 'your-jwt-secret-change-this' ? 'SET' : 'NOT SET (using default)');
+console.log('ACCESS_PASSWORD:', process.env.ACCESS_PASSWORD ? 'SET' : 'NOT SET');
+console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
 console.log('NODE_ENV:', process.env.NODE_ENV || 'not set');
 console.log('All environment variables:');
 Object.keys(process.env).forEach(key => {
@@ -66,39 +65,6 @@ const upload = multer({
 });
 
 // Simple auth functions
-function authenticateSimple(req, res) {
-  const { password } = req.body;
-  
-  if (password === ACCESS_PASSWORD) {
-    const token = jwt.sign(
-      { authenticated: true, timestamp: Date.now() },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    
-    res.json({ success: true, token });
-  } else {
-    res.status(401).json({ success: false, error: 'Invalid password' });
-  }
-}
-
-function requireSimpleAuth(req, res, next) {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-  
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid token' });
-    }
-    
-    req.auth = decoded;
-    next();
-  });
-}
 
 // Health check endpoint (public)
 app.get('/health', (req, res) => {
@@ -115,8 +81,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Debug endpoint to check environment variables (public for now)
-app.get('/debug/env', (req, res) => {
+// Debug endpoint to check environment variables (protected)
+app.get('/debug/env', requireSimpleAuth, (req, res) => {
   const envVars = {};
   Object.keys(process.env).forEach(key => {
     // Only show non-sensitive info
