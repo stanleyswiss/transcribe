@@ -502,19 +502,19 @@ class TranscriptionApp {
         let stage = 0;
         
         const stages = isVideo ? [
-            { end: 35, duration: 3000, message: 'Analyzing video file...', detail: 'Reading video metadata and streams' },
-            { end: 55, duration: Math.max(8000, sizeMB * 50), message: 'Extracting audio from video...', detail: 'Converting video to high-quality audio' },
-            { end: 65, duration: 2000, message: 'Audio extraction complete', detail: 'Checking audio file size for chunking' },
-            { end: 75, duration: 3000, message: 'Preparing for transcription...', detail: 'Splitting large audio into optimal chunks' },
-            { end: 85, duration: Math.max(10000, sizeMB * 200), message: 'Transcribing with AI...', detail: 'Processing audio chunks with OpenAI Whisper' },
-            { end: 95, duration: 2000, message: 'Combining results...', detail: 'Merging chunk transcriptions into final text' },
-            { end: 99, duration: 1000, message: 'Saving transcription...', detail: 'Writing final transcription to file' }
+            { end: 30, duration: 3000, message: 'Analyzing video file...', detail: 'Reading video metadata and streams' },
+            { end: 50, duration: Math.max(8000, sizeMB * 50), message: 'Extracting audio from video...', detail: 'Converting video to high-quality audio' },
+            { end: 55, duration: 2000, message: 'Audio extraction complete', detail: 'Preparing audio for transcription' },
+            { end: 60, duration: 3000, message: 'Starting transcription...', detail: 'Initializing OpenAI Whisper' },
+            { end: 90, duration: Math.max(10000, sizeMB * 200), message: 'Transcribing with AI...', detail: 'Processing audio with OpenAI Whisper' },
+            { end: 95, duration: 2000, message: 'Finalizing results...', detail: 'Processing transcription output' },
+            { end: 100, duration: 1000, message: 'Complete!', detail: 'Transcription saved successfully' }
         ] : [
-            { end: 35, duration: 2000, message: 'Analyzing audio file...', detail: 'Reading audio metadata and format' },
-            { end: 50, duration: 3000, message: 'Preparing for transcription...', detail: 'Checking file size and splitting if needed' },
-            { end: 85, duration: Math.max(8000, sizeMB * 150), message: 'Transcribing with AI...', detail: 'Processing audio with OpenAI Whisper' },
-            { end: 95, duration: 2000, message: 'Combining results...', detail: 'Finalizing transcription text' },
-            { end: 99, duration: 1000, message: 'Saving transcription...', detail: 'Writing transcription to file' }
+            { end: 30, duration: 2000, message: 'Analyzing audio file...', detail: 'Reading audio metadata and format' },
+            { end: 40, duration: 3000, message: 'Preparing for transcription...', detail: 'Setting up audio processing' },
+            { end: 90, duration: Math.max(8000, sizeMB * 150), message: 'Transcribing with AI...', detail: 'Processing audio with OpenAI Whisper' },
+            { end: 95, duration: 2000, message: 'Finalizing results...', detail: 'Processing transcription output' },
+            { end: 100, duration: 1000, message: 'Complete!', detail: 'Transcription saved successfully' }
         ];
 
         const progressStage = () => {
