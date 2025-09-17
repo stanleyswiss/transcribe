@@ -347,8 +347,8 @@ class TranscriptionApp {
                 transcription = await this.transcribeFile(this.selectedFile);
             }
             
-            this.updateProgress(100, 'Transcription complete!', 'Processing finished successfully');
-            setTimeout(() => this.showResult(transcription), 500);
+            // Don't update to 100% here - let showResult do it when actually complete
+            setTimeout(() => this.showResult(transcription), 100);
 
         } catch (error) {
             console.error('Processing error:', error);
@@ -502,19 +502,19 @@ class TranscriptionApp {
         let stage = 0;
         
         const stages = isVideo ? [
-            { end: 30, duration: 3000, message: 'Analyzing video file...', detail: 'Reading video metadata and streams' },
-            { end: 50, duration: Math.max(8000, sizeMB * 50), message: 'Extracting audio from video...', detail: 'Converting video to high-quality audio' },
-            { end: 55, duration: 2000, message: 'Audio extraction complete', detail: 'Preparing audio for transcription' },
-            { end: 60, duration: 3000, message: 'Starting transcription...', detail: 'Initializing OpenAI Whisper' },
-            { end: 90, duration: Math.max(10000, sizeMB * 200), message: 'Transcribing with AI...', detail: 'Processing audio with OpenAI Whisper' },
-            { end: 95, duration: 2000, message: 'Finalizing results...', detail: 'Processing transcription output' },
-            { end: 100, duration: 1000, message: 'Complete!', detail: 'Transcription saved successfully' }
+            { end: 25, duration: 3000, message: 'Analyzing video file...', detail: 'Reading video metadata and streams' },
+            { end: 45, duration: Math.max(8000, sizeMB * 50), message: 'Extracting audio from video...', detail: 'Converting video to high-quality audio' },
+            { end: 50, duration: 2000, message: 'Audio extraction complete', detail: 'Preparing audio for transcription' },
+            { end: 55, duration: 3000, message: 'Starting transcription...', detail: 'Initializing OpenAI Whisper' },
+            { end: 85, duration: Math.max(15000, sizeMB * 300), message: 'Transcribing with AI...', detail: 'Processing audio with OpenAI Whisper' },
+            { end: 90, duration: 3000, message: 'Processing results...', detail: 'Waiting for transcription to complete' },
+            { end: 95, duration: Math.max(5000, sizeMB * 100), message: 'Finalizing transcription...', detail: 'Saving results to file' }
         ] : [
-            { end: 30, duration: 2000, message: 'Analyzing audio file...', detail: 'Reading audio metadata and format' },
-            { end: 40, duration: 3000, message: 'Preparing for transcription...', detail: 'Setting up audio processing' },
-            { end: 90, duration: Math.max(8000, sizeMB * 150), message: 'Transcribing with AI...', detail: 'Processing audio with OpenAI Whisper' },
-            { end: 95, duration: 2000, message: 'Finalizing results...', detail: 'Processing transcription output' },
-            { end: 100, duration: 1000, message: 'Complete!', detail: 'Transcription saved successfully' }
+            { end: 25, duration: 2000, message: 'Analyzing audio file...', detail: 'Reading audio metadata and format' },
+            { end: 35, duration: 3000, message: 'Preparing for transcription...', detail: 'Setting up audio processing' },
+            { end: 85, duration: Math.max(12000, sizeMB * 250), message: 'Transcribing with AI...', detail: 'Processing audio with OpenAI Whisper' },
+            { end: 90, duration: 3000, message: 'Processing results...', detail: 'Waiting for transcription to complete' },
+            { end: 95, duration: Math.max(5000, sizeMB * 100), message: 'Finalizing transcription...', detail: 'Saving results to file' }
         ];
 
         const progressStage = () => {
@@ -578,6 +578,9 @@ class TranscriptionApp {
         if (this.progressInterval) {
             clearInterval(this.progressInterval);
         }
+        
+        // Update to 100% now that we have the actual result
+        this.updateProgress(100, 'Complete!', 'Transcription saved successfully');
         
         this.currentTranscription = result;
         
