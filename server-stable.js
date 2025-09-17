@@ -277,12 +277,15 @@ app.get('/api/progress/:id', (req, res) => {
   
   // Verify token from query parameter for SSE
   if (!token) {
+    console.log('Progress endpoint: No token provided');
     return res.status(401).json({ error: 'No token provided' });
   }
   
   try {
-    jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log(`Progress endpoint: Token verified for session ${id}`);
   } catch (err) {
+    console.log('Progress endpoint: Invalid token -', err.message);
     return res.status(403).json({ error: 'Invalid token' });
   }
   
@@ -290,12 +293,17 @@ app.get('/api/progress/:id', (req, res) => {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*'
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Credentials': 'true'
   });
+  
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ message: 'Connected to progress stream', type: 'connected' })}\n\n`);
   
   progressClients.set(id, res);
   
   req.on('close', () => {
+    console.log(`Progress client disconnected: ${id}`);
     progressClients.delete(id);
   });
 });

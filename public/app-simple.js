@@ -737,6 +737,10 @@ class TranscriptionApp {
 
     connectToProgress(progressId, resolve, reject) {
         const token = this.authToken || localStorage.getItem('authToken');
+        if (!token) {
+            reject(new Error('No authentication token found'));
+            return;
+        }
         const eventSource = new EventSource(`/api/progress/${progressId}?token=${encodeURIComponent(token)}`);
         let currentProgress = 20; // Start from where upload finished
         
