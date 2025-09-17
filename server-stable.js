@@ -271,8 +271,20 @@ async function transcribeChunks(chunks, progressId) {
 const progressClients = new Map();
 
 // SSE endpoint for progress updates
-app.get('/api/progress/:id', requireSimpleAuth, (req, res) => {
+app.get('/api/progress/:id', (req, res) => {
   const { id } = req.params;
+  const { token } = req.query;
+  
+  // Verify token from query parameter for SSE
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  
+  try {
+    jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
   
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -413,6 +425,24 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
       details: error.message
     });
   }
+});
+
+// Download transcription endpoint (protected)
+app.get('/api/download/:filename', requireSimpleAuth, (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join('uploads', filename);
+  
+  const resolvedPath = path.resolve(filePath);
+  const uploadsDir = path.resolve('uploads');
+  if (!resolvedPath.startsWith(uploadsDir)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  
+  res.download(filePath);
 });
 
 // Catch-all route for debugging

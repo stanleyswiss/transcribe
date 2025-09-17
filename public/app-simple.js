@@ -736,7 +736,8 @@ class TranscriptionApp {
     }
 
     connectToProgress(progressId, resolve, reject) {
-        const eventSource = new EventSource(`/api/progress/${progressId}`);
+        const token = this.authToken || localStorage.getItem('authToken');
+        const eventSource = new EventSource(`/api/progress/${progressId}?token=${encodeURIComponent(token)}`);
         let currentProgress = 20; // Start from where upload finished
         
         eventSource.onmessage = (event) => {
