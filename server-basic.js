@@ -74,8 +74,8 @@ app.get('/health', (req, res) => {
     env: {
       port: PORT,
       hasOpenAI: !!OPENAI_API_KEY,
-      hasPassword: ACCESS_PASSWORD !== 'changeme',
-      hasJWT: JWT_SECRET !== 'your-jwt-secret-change-this',
+      hasPassword: !!process.env.ACCESS_PASSWORD,
+      hasJWT: !!process.env.JWT_SECRET,
       nodeEnv: process.env.NODE_ENV || 'not set'
     }
   });
