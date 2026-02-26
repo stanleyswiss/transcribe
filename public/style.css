@@ -487,3 +487,27 @@ footer {
         margin: 20px 0;
     }
 }
+
+/* Delete button in file cards */
+.file-card-footer {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #dee2e6;
+    text-align: right;
+}
+
+.btn-delete {
+    background: none;
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-delete:hover {
+    background: #dc3545;
+    color: white;
+}

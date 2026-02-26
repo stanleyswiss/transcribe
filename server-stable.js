@@ -339,7 +339,7 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
     // Process async after response
     setTimeout(async () => {
       let audioPath = req.file.path;
-      let tempFiles = [];
+      let tempFiles = [req.file.path]; // always delete original upload after processing
       
       try {
         // Check if it's a video file
@@ -451,6 +451,31 @@ app.get('/api/download/:filename', requireSimpleAuth, (req, res) => {
   }
   
   res.download(filePath);
+});
+
+// Delete file endpoint (protected)
+app.delete('/api/files/:filename', requireSimpleAuth, (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join('uploads', filename);
+
+  const resolvedPath = path.resolve(filePath);
+  const uploadsDir = path.resolve('uploads');
+  if (!resolvedPath.startsWith(uploadsDir)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  try {
+    fs.unlinkSync(filePath);
+    console.log(`🗑️ Deleted file: ${filename}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({ error: 'Failed to delete file' });
+  }
 });
 
 // Catch-all route for debugging

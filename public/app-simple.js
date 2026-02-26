@@ -159,6 +159,9 @@ class TranscriptionApp {
                         <div class="file-size">${this.formatFileSize(file.size)}</div>
                         <div class="file-date">${date} at ${time}</div>
                     </div>
+                    <div class="file-card-footer">
+                        <button class="btn-delete" onclick="event.stopPropagation(); app.deleteFile('${this.escapeHtml(file.name)}')" title="Delete file">🗑️ Delete</button>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -735,6 +738,27 @@ class TranscriptionApp {
         } catch (error) {
             console.error('Error loading transcription:', error);
             this.showError('Failed to load transcription file');
+        }
+    }
+
+    async deleteFile(filename) {
+        if (!confirm(`Delete "${filename}"?\nThis cannot be undone.`)) return;
+
+        try {
+            const response = await fetch(`/api/files/${encodeURIComponent(filename)}`, {
+                method: 'DELETE',
+                headers: this.getAuthHeaders()
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Delete failed');
+            }
+
+            await this.loadServerFiles();
+        } catch (error) {
+            console.error('Delete error:', error);
+            this.showError(`Failed to delete: ${error.message}`);
         }
     }
 
