@@ -14,7 +14,8 @@
     "start": "node server-stable.js",
     "start:simple": "node server-simple.js",
     "start:clerk": "node server.js",
-    "dev": "node server-stable.js"
+    "dev": "node server-stable.js",
+    "test": "node --test test/*.test.js"
   },
   "keywords": ["transcription", "whisper", "ffmpeg"],
   "author": "",

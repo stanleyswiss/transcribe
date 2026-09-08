@@ -6,6 +6,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { isAllowedUpload, mediaKind, transcriptionContentType } = require('./media');
 
 const execAsync = promisify(exec);
 
@@ -71,27 +72,7 @@ const upload = multer({
     fileSize: 1500 * 1024 * 1024 // 1.5GB limit
   },
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = [
-      'audio/mpeg',
-      'audio/mp3',
-      'audio/wav',
-      'audio/wave',
-      'audio/x-wav',
-      'audio/mp4',
-      'audio/m4a',
-      'audio/x-m4a',
-      'audio/ogg',
-      'audio/webm',
-      'video/mp4',
-      'video/mpeg',
-      'video/quicktime',
-      'video/webm'
-    ];
-    
-    const allowedExtensions = ['.mp3', '.wav', '.m4a', '.mp4', '.mpeg', '.mpg', '.mov', '.ogg', '.webm'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    
-    if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
+    if (isAllowedUpload(file)) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file type. Only audio and video files are allowed.'));
@@ -217,7 +198,7 @@ async function splitAudioIntoChunks(audioPath, progressId, maxSizeMB = 24) {
     const startTime = i * chunkDuration;
     const chunkPath = path.join(baseDir, `${baseName}_chunk_${i + 1}.mp3`);
     
-    const splitCommand = `ffmpeg -i "${audioPath}" -ss ${startTime} -t ${chunkDuration} -acodec copy -y "${chunkPath}"`;
+    const splitCommand = `ffmpeg -i "${audioPath}" -ss ${startTime} -t ${chunkDuration} -vn -ac 1 -ar 22050 -acodec mp3 -ab 64k -y "${chunkPath}"`;
     
     console.log(`🔪 Creating chunk ${i + 1}/${numChunks}...`);
     sendProgress(progressId, `Creating chunk ${i + 1}/${numChunks}...`, 'info');
@@ -243,7 +224,7 @@ async function transcribeChunks(chunks, progressId) {
     const formData = new FormData();
     formData.append('file', fs.createReadStream(chunks[i]), {
       filename: path.basename(chunks[i]),
-      contentType: 'audio/mp3'
+      contentType: transcriptionContentType(chunks[i])
     });
     formData.append('model', 'whisper-1');
     formData.append('response_format', 'json');
@@ -343,8 +324,9 @@ app.post('/api/transcribe', requireSimpleAuth, upload.single('file'), async (req
       
       try {
         // Check if it's a video file
-        const isVideo = req.file.mimetype.startsWith('video/');
-        const isAudio = req.file.mimetype.startsWith('audio/');
+        const kind = mediaKind(req.file.originalname, req.file.mimetype);
+        const isVideo = kind === 'video';
+        const isAudio = kind === 'audio';
         
         if (!isVideo && !isAudio) {
           sendProgress(progressId, 'Error: Please upload video or audio files only', 'error');
