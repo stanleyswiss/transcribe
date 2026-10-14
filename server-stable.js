@@ -6,13 +6,16 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const { exec } = require('child_process');
 const { promisify } = require('util');
-const { isAllowedUpload, mediaKind, transcriptionContentType } = require('./media');
+const { isAllowedUpload, mediaKind, transcriptionContentType, planChunks } = require('./media');
 
 const execAsync = promisify(exec);
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+// Set TRANSCRIBE_MODEL=whisper-1 to roll back without a code change.
+const TRANSCRIBE_MODEL = process.env.TRANSCRIBE_MODEL || 'gpt-transcribe';
+const MAX_CHUNK_SECONDS = Number(process.env.TRANSCRIBE_CHUNK_SECONDS) || 1200;
 const { authenticateSimple, requireSimpleAuth } = require('./middleware/simpleAuth');
 
 console.log('🚀 Starting Transcription Server...');
@@ -21,6 +24,7 @@ console.log(`   PORT: ${PORT}`);
 console.log(`   process.env.PORT: ${process.env.PORT}`);
 console.log(`   Railway PORT env: ${process.env.PORT || 'NOT SET'}`);
 console.log(`   OPENAI_API_KEY: ${OPENAI_API_KEY ? '✅ SET' : '❌ NOT SET'}`);
+console.log(`   TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL}, chunks up to ${MAX_CHUNK_SECONDS}s`);
 console.log(`   ACCESS_PASSWORD: ${process.env.ACCESS_PASSWORD ? '✅ SET' : '❌ NOT SET'}`);
 console.log(`   JWT_SECRET: ${process.env.JWT_SECRET ? '✅ SET' : '❌ NOT SET'}`);
 
@@ -169,26 +173,34 @@ async function extractAudio(inputPath, outputPath, progressId) {
   }
 }
 
-// Split audio into chunks
+// Split audio into chunks that stay under the model's size and duration limits
 async function splitAudioIntoChunks(audioPath, progressId, maxSizeMB = 24) {
   const stats = fs.statSync(audioPath);
   const fileSizeMB = stats.size / (1024 * 1024);
   
-  if (fileSizeMB <= maxSizeMB) {
+  // Get audio duration
+  const durationCommand = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`;
+  let totalDuration = NaN;
+  try {
+    const { stdout: duration } = await execAsync(durationCommand);
+    totalDuration = parseFloat(duration);
+  } catch (error) {
+    // Small files still go through as one request, as before; planChunks rejects large ones.
+    console.warn('⚠️ ffprobe could not read the duration');
+  }
+
+  const { numChunks, chunkDuration } = planChunks(totalDuration, fileSizeMB, {
+    maxChunkSeconds: MAX_CHUNK_SECONDS,
+    maxSizeMB
+  });
+  
+  if (numChunks === 1) {
     return [audioPath];
   }
   
-  console.log(`📊 File size: ${fileSizeMB.toFixed(2)}MB, splitting into chunks...`);
-  sendProgress(progressId, `File size: ${fileSizeMB.toFixed(2)}MB, splitting into chunks...`, 'info');
-  
-  // Get audio duration
-  const durationCommand = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`;
-  const { stdout: duration } = await execAsync(durationCommand);
-  const totalDuration = parseFloat(duration);
-  
-  // Calculate chunk duration to get files under maxSizeMB
-  const numChunks = Math.ceil(fileSizeMB / maxSizeMB);
-  const chunkDuration = Math.floor(totalDuration / numChunks);
+  const minutes = (totalDuration / 60).toFixed(1);
+  console.log(`📊 ${fileSizeMB.toFixed(2)}MB, ${minutes} min, splitting into ${numChunks} chunks...`);
+  sendProgress(progressId, `${fileSizeMB.toFixed(2)}MB, ${minutes} min, splitting into ${numChunks} chunks...`, 'info');
   
   const chunks = [];
   const baseDir = path.dirname(audioPath);
@@ -198,7 +210,7 @@ async function splitAudioIntoChunks(audioPath, progressId, maxSizeMB = 24) {
     const startTime = i * chunkDuration;
     const chunkPath = path.join(baseDir, `${baseName}_chunk_${i + 1}.mp3`);
     
-    const splitCommand = `ffmpeg -i "${audioPath}" -ss ${startTime} -t ${chunkDuration} -vn -ac 1 -ar 22050 -acodec mp3 -ab 64k -y "${chunkPath}"`;
+    const splitCommand = `ffmpeg -ss ${startTime} -t ${chunkDuration} -i "${audioPath}" -vn -ac 1 -ar 22050 -acodec mp3 -ab 64k -y "${chunkPath}"`;
     
     console.log(`🔪 Creating chunk ${i + 1}/${numChunks}...`);
     sendProgress(progressId, `Creating chunk ${i + 1}/${numChunks}...`, 'info');
@@ -226,7 +238,7 @@ async function transcribeChunks(chunks, progressId) {
       filename: path.basename(chunks[i]),
       contentType: transcriptionContentType(chunks[i])
     });
-    formData.append('model', 'whisper-1');
+    formData.append('model', TRANSCRIBE_MODEL);
     formData.append('response_format', 'json');
     
     try {
@@ -240,8 +252,11 @@ async function transcribeChunks(chunks, progressId) {
       
       transcriptions.push(response.data.text);
     } catch (error) {
-      console.error(`❌ Error transcribing chunk ${i + 1}:`, error);
-      throw error;
+      // Log only status and API message: the axios error object carries the Authorization header.
+      const status = error.response?.status;
+      const apiMessage = error.response?.data?.error?.message || error.message;
+      console.error(`❌ Error transcribing chunk ${i + 1}/${chunks.length} (${status || 'no status'}): ${apiMessage}`);
+      throw new Error(`Chunk ${i + 1}/${chunks.length} failed: ${apiMessage}`);
     }
   }
   

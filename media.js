@@ -51,4 +51,21 @@ function transcriptionContentType(filename) {
   }
 }
 
-module.exports = { isAllowedUpload, mediaKind, transcriptionContentType };
+// Each request must stay under the 25 MB upload limit. The duration cap keeps long
+// meetings independent of how much audio a model accepts in one request. Returns how
+// many chunks to cut and how long each one is (the last chunk may be shorter).
+function planChunks(durationSeconds, fileSizeMB, { maxChunkSeconds = 1200, maxSizeMB = 24 } = {}) {
+  const bySize = Math.ceil(fileSizeMB / maxSizeMB);
+
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    if (bySize <= 1) return { numChunks: 1, chunkDuration: null };
+    throw new Error('Could not read the audio duration needed to split this file');
+  }
+
+  const byDuration = Math.ceil(durationSeconds / maxChunkSeconds);
+  const numChunks = Math.max(1, bySize, byDuration);
+  // Round up so the chunks always cover the whole recording, including the last seconds.
+  return { numChunks, chunkDuration: Math.ceil(durationSeconds / numChunks) };
+}
+
+module.exports = { isAllowedUpload, mediaKind, transcriptionContentType, planChunks };
