@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:24-alpine
 
 # Install FFmpeg for video processing
 RUN apk add --no-cache ffmpeg
